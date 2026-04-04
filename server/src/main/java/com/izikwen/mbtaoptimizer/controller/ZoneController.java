@@ -2,9 +2,7 @@ package com.izikwen.mbtaoptimizer.controller;
 
 import com.izikwen.mbtaoptimizer.dto.response.ZoneInfoResponse;
 import com.izikwen.mbtaoptimizer.dto.response.ZoneScoreResponse;
-import com.izikwen.mbtaoptimizer.entity.Zone;
-import com.izikwen.mbtaoptimizer.repository.ZoneRepository;
-import com.izikwen.mbtaoptimizer.service.ZoneScoreService;
+import com.izikwen.mbtaoptimizer.service.ZoneService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,37 +12,19 @@ import java.util.List;
 @RequestMapping("/api/zones")
 public class ZoneController {
 
-    private final ZoneRepository zoneRepository;
-    private final ZoneScoreService zoneScoreService;
+    private final ZoneService zoneService;
 
-    public ZoneController(ZoneRepository zoneRepository, ZoneScoreService zoneScoreService) {
-        this.zoneRepository = zoneRepository;
-        this.zoneScoreService = zoneScoreService;
+    public ZoneController(ZoneService zoneService) {
+        this.zoneService = zoneService;
     }
 
-    /**
-     * GET /api/zones
-     * Returns all zones with their location coordinates.
-     */
     @GetMapping
     public ResponseEntity<List<ZoneInfoResponse>> getZones() {
-        List<Zone> zones = zoneRepository.findAllByOrderByZoneIdAsc();
-        List<ZoneInfoResponse> result = zones.stream()
-                .map(z -> new ZoneInfoResponse(
-                        z.getZoneId(), z.getName(),
-                        z.getCenterLat(), z.getCenterLng(),
-                        z.getMinLat(), z.getMinLng(),
-                        z.getMaxLat(), z.getMaxLng()))
-                .toList();
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(zoneService.getZones());
     }
 
-    /**
-     * GET /api/zones/scores
-     * Calculates and returns a service score for every zone.
-     */
     @GetMapping("/scores")
-    public ResponseEntity<List<ZoneScoreResponse>> calculateAllZoneScores() {
-        return ResponseEntity.ok(zoneScoreService.calculateAllZoneScores());
+    public ResponseEntity<List<ZoneScoreResponse>> getZoneScores() {
+        return ResponseEntity.ok(zoneService.getZoneScores());
     }
 }

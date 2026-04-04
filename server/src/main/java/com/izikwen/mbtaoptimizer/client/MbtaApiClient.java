@@ -9,11 +9,9 @@ import org.springframework.web.client.RestClient;
 public class MbtaApiClient {
 
     private final RestClient restClient;
-    private final String apiKey;
 
     public MbtaApiClient(RestClient.Builder builder,
                          @Value("${mbta.api-key:}") String apiKey) {
-        this.apiKey = apiKey;
         RestClient.Builder b = builder.baseUrl("https://api-v3.mbta.com");
         if (apiKey != null && !apiKey.isBlank()) {
             b.defaultHeader("x-api-key", apiKey);
@@ -40,5 +38,16 @@ public class MbtaApiClient {
                 .uri("/route_patterns?filter[route]={routeId}&include=representative_trip.stops", routeId)
                 .retrieve()
                 .body(JsonNode.class);
+    }
+
+    /**
+     * Fetch all stops by route type in bulk.
+     * routeType: 0=LightRail, 1=HeavyRail, 2=CommuterRail, 3=Bus, 4=Ferry
+     */
+    public JsonNode getAllStops(String routeType) {
+        String uri = routeType != null
+                ? "/stops?filter[route_type]=" + routeType + "&page[limit]=10000"
+                : "/stops?page[limit]=10000";
+        return restClient.get().uri(uri).retrieve().body(JsonNode.class);
     }
 }

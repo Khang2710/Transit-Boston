@@ -1,10 +1,9 @@
 package com.izikwen.mbtaoptimizer.service;
 
 import com.izikwen.mbtaoptimizer.dto.response.ZoneDemandResponse;
+import com.izikwen.mbtaoptimizer.dto.response.ZoneInfoResponse;
 import com.izikwen.mbtaoptimizer.entity.DemandSnapshot;
-import com.izikwen.mbtaoptimizer.entity.Zone;
 import com.izikwen.mbtaoptimizer.repository.DemandSnapshotRepository;
-import com.izikwen.mbtaoptimizer.repository.ZoneRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -15,20 +14,16 @@ import java.util.stream.Collectors;
 @Service
 public class HeatmapService {
 
-    private final ZoneRepository zoneRepository;
+    private final ZoneService zoneService;
     private final DemandSnapshotRepository demandRepository;
 
-    public HeatmapService(ZoneRepository zoneRepository, DemandSnapshotRepository demandRepository) {
-        this.zoneRepository = zoneRepository;
+    public HeatmapService(ZoneService zoneService, DemandSnapshotRepository demandRepository) {
+        this.zoneService = zoneService;
         this.demandRepository = demandRepository;
     }
 
-    /**
-     * Returns demand aggregated by zone for a given time of day.
-     * Maps DemandSnapshot areaCode to Zone zoneId.
-     */
     public List<ZoneDemandResponse> getHeatmapZones(Integer timeOfDay) {
-        List<Zone> zones = zoneRepository.findAllByOrderByZoneIdAsc();
+        List<ZoneInfoResponse> zones = zoneService.getZones();
         List<DemandSnapshot> snapshots = demandRepository.findByHourOfDay(timeOfDay);
 
         Map<String, Double> demandByArea = snapshots.stream()
@@ -38,7 +33,7 @@ public class HeatmapService {
                 ));
 
         List<ZoneDemandResponse> result = new ArrayList<>();
-        for (Zone zone : zones) {
+        for (ZoneInfoResponse zone : zones) {
             Double demand = demandByArea.getOrDefault(zone.getZoneId(), 0.0);
             result.add(new ZoneDemandResponse(
                     zone.getZoneId(), zone.getName(), demand,

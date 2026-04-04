@@ -2,6 +2,7 @@ package com.izikwen.mbtaoptimizer.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.izikwen.mbtaoptimizer.client.MbtaApiClient;
+import com.izikwen.mbtaoptimizer.config.GeoBounds;
 import com.izikwen.mbtaoptimizer.dto.response.NetworkResponse;
 import com.izikwen.mbtaoptimizer.dto.response.NetworkResponse.EdgeDto;
 import com.izikwen.mbtaoptimizer.dto.response.NetworkResponse.LineDto;
@@ -23,11 +24,8 @@ public class NetworkService {
     }
 
     /**
-     * Builds the full transit network from the live MBTA API.
-     * Fetches routes, then for each route fetches route_patterns
-     * with included stops to get correct stop ordering and edges.
-     *
-     * @param filterType optional route type filter (0=LightRail,1=HeavyRail,2=CommuterRail,3=Bus)
+     * Builds the transit network from the live MBTA API,
+     * clipped to the metro Boston bounding box.
      */
     public NetworkResponse getNetwork(String filterType) {
         JsonNode routesJson = mbtaClient.getRoutes(filterType);
@@ -45,7 +43,6 @@ public class NetworkService {
             int type = attrs.path("type").asInt(-1);
             String mode = typeToMode(type);
 
-            // Fetch route_patterns with representative_trip.stops for ordered stops
             List<StopDto> orderedStops;
             try {
                 orderedStops = fetchOrderedStops(routeId);
@@ -54,24 +51,36 @@ public class NetworkService {
                 orderedStops = fetchStopsFallback(routeId);
             }
 
+            // Filter to metro bounds
+            orderedStops = orderedStops.stream()
+                    .filter(s -> GeoBounds.inBounds(s.getLat(), s.getLng()))
+                    .toList();
+
             if (orderedStops.isEmpty()) continue;
 
-            // Build edges between consecutive stops
+            // Re-number stop IDs sequentially after filtering
+            List<StopDto> numbered = new ArrayList<>();
+            long idCounter = 1;
+            for (StopDto s : orderedStops) {
+                numbered.add(new StopDto(idCounter++, s.getMbtaStopId(), s.getName(), s.getLat(), s.getLng()));
+            }
+
+            // Build edges between consecutive in-bounds stops
             List<EdgeDto> edges = new ArrayList<>();
-            for (int i = 0; i < orderedStops.size() - 1; i++) {
-                StopDto from = orderedStops.get(i);
-                StopDto to = orderedStops.get(i + 1);
+            for (int i = 0; i < numbered.size() - 1; i++) {
+                StopDto from = numbered.get(i);
+                StopDto to = numbered.get(i + 1);
                 double dist = haversine(from.getLat(), from.getLng(), to.getLat(), to.getLng());
                 edges.add(new EdgeDto(from.getStopId(), to.getStopId(), Math.round(dist * 10.0) / 10.0));
             }
 
             LineDto line = new LineDto();
-            line.setLineId(routeId.hashCode() & 0xFFFFFFFFL); // stable numeric id from string
+            line.setLineId(routeId.hashCode() & 0xFFFFFFFFL);
             line.setLineName(longName != null && !longName.isEmpty() ? longName : shortName);
             line.setColor(color);
             line.setMode(mode);
             line.setMbtaRouteId(routeId);
-            line.setStops(orderedStops);
+            line.setStops(numbered);
             line.setEdges(edges);
             lines.add(line);
         }
@@ -79,45 +88,35 @@ public class NetworkService {
         return new NetworkResponse(lines);
     }
 
-    /**
-     * Fetches stops in trip order using route_patterns + representative_trip.stops.
-     * Uses the first (canonical) direction's pattern.
-     */
     private List<StopDto> fetchOrderedStops(String routeId) {
         JsonNode rpJson = mbtaClient.getRoutePatterns(routeId);
         JsonNode included = rpJson.path("included");
 
-        // Build a map of stop id -> stop data from "included"
         Map<String, JsonNode> stopNodesById = new LinkedHashMap<>();
         Map<String, JsonNode> tripNodesById = new LinkedHashMap<>();
         for (JsonNode inc : included) {
-            String type = inc.path("type").asText();
+            String incType = inc.path("type").asText();
             String id = inc.path("id").asText();
-            if ("stop".equals(type)) {
-                stopNodesById.put(id, inc);
-            } else if ("trip".equals(type)) {
-                tripNodesById.put(id, inc);
-            }
+            if ("stop".equals(incType)) stopNodesById.put(id, inc);
+            else if ("trip".equals(incType)) tripNodesById.put(id, inc);
         }
 
-        // Find the first route_pattern's representative_trip
         JsonNode patternsData = rpJson.path("data");
         if (patternsData.isEmpty()) return List.of();
 
-        // Pick direction 0 pattern (outbound)
         JsonNode chosenPattern = null;
         for (JsonNode pat : patternsData) {
-            int dir = pat.path("attributes").path("direction_id").asInt(-1);
-            if (dir == 0) { chosenPattern = pat; break; }
+            if (pat.path("attributes").path("direction_id").asInt(-1) == 0) {
+                chosenPattern = pat;
+                break;
+            }
         }
         if (chosenPattern == null) chosenPattern = patternsData.get(0);
 
-        // Get the representative trip id
         String tripId = chosenPattern.path("relationships")
                 .path("representative_trip").path("data").path("id").asText(null);
         if (tripId == null) return List.of();
 
-        // Get the trip's stop relationships (ordered)
         JsonNode tripNode = tripNodesById.get(tripId);
         if (tripNode == null) return List.of();
 
@@ -130,22 +129,15 @@ public class NetworkService {
             String stopId = stopRef.path("id").asText();
             JsonNode stopNode = stopNodesById.get(stopId);
             if (stopNode == null) continue;
-
             JsonNode sa = stopNode.path("attributes");
-            result.add(new StopDto(
-                    idCounter++,
-                    stopId,
+            result.add(new StopDto(idCounter++, stopId,
                     sa.path("name").asText("Unknown"),
                     sa.path("latitude").asDouble(0),
-                    sa.path("longitude").asDouble(0)
-            ));
+                    sa.path("longitude").asDouble(0)));
         }
         return result;
     }
 
-    /**
-     * Fallback: fetch stops from /stops?filter[route]=X (unordered).
-     */
     private List<StopDto> fetchStopsFallback(String routeId) {
         JsonNode stopsJson = mbtaClient.getStopsForRoute(routeId);
         JsonNode stopsData = stopsJson.path("data");
@@ -154,13 +146,10 @@ public class NetworkService {
         long idCounter = 1;
         for (JsonNode stopNode : stopsData) {
             JsonNode sa = stopNode.path("attributes");
-            stops.add(new StopDto(
-                    idCounter++,
-                    stopNode.path("id").asText(),
+            stops.add(new StopDto(idCounter++, stopNode.path("id").asText(),
                     sa.path("name").asText("Unknown"),
                     sa.path("latitude").asDouble(0),
-                    sa.path("longitude").asDouble(0)
-            ));
+                    sa.path("longitude").asDouble(0)));
         }
         return stops;
     }

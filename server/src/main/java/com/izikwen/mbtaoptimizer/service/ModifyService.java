@@ -22,21 +22,18 @@ public class ModifyService {
     private final TransitStopRepository stopRepository;
     private final TransitRouteRepository routeRepository;
     private final RouteSegmentRepository segmentRepository;
-    private final ZoneScoreService zoneScoreService;
+    private final ZoneService zoneService;
 
     public ModifyService(TransitStopRepository stopRepository,
                          TransitRouteRepository routeRepository,
                          RouteSegmentRepository segmentRepository,
-                         ZoneScoreService zoneScoreService) {
+                         ZoneService zoneService) {
         this.stopRepository = stopRepository;
         this.routeRepository = routeRepository;
         this.segmentRepository = segmentRepository;
-        this.zoneScoreService = zoneScoreService;
+        this.zoneService = zoneService;
     }
 
-    /**
-     * Modify a stop (MOVE or DELETE) and return recalculated zone scores.
-     */
     @Transactional
     public List<ZoneScoreResponse> modifyStop(ModifyStopRequest request) {
         TransitStop stop = stopRepository.findById(request.getStopId())
@@ -61,13 +58,9 @@ public class ModifyService {
             default -> throw new IllegalArgumentException("Unknown modificationType: " + type + ". Use MOVE or DELETE.");
         }
 
-        return zoneScoreService.calculateAllZoneScores();
+        return zoneService.getZoneScores();
     }
 
-    /**
-     * Modify a line (INCR_SERVICE, DECR_SERVICE, ADD_STOP, REMOVE_STOP)
-     * and return recalculated zone scores + time window.
-     */
     @Transactional
     public ModifyLineResponse modifyLine(ModifyLineRequest request) {
         TransitRoute route = routeRepository.findById(request.getLine())
@@ -76,7 +69,6 @@ public class ModifyService {
         String type = request.getModificationType().toUpperCase();
         switch (type) {
             case "INCR_SERVICE" -> {
-                // Increase service: reduce wait times on all segments of this route
                 List<RouteSegment> segments = segmentRepository.findByRoute_Id(route.getId());
                 for (RouteSegment seg : segments) {
                     int reduced = Math.max(30, seg.getAverageWaitTimeSeconds() - 60);
@@ -85,7 +77,6 @@ public class ModifyService {
                 segmentRepository.saveAll(segments);
             }
             case "DECR_SERVICE" -> {
-                // Decrease service: increase wait times on all segments of this route
                 List<RouteSegment> segments = segmentRepository.findByRoute_Id(route.getId());
                 for (RouteSegment seg : segments) {
                     seg.setAverageWaitTimeSeconds(seg.getAverageWaitTimeSeconds() + 60);
@@ -100,7 +91,6 @@ public class ModifyService {
                         .orElseThrow(() -> new ResourceNotFoundException(
                                 "Stop not found: " + request.getModification().getStopId()));
 
-                // Find last segment on this route to chain the new stop
                 List<RouteSegment> existing = segmentRepository.findByRoute_Id(route.getId());
                 TransitStop lastStop = existing.isEmpty() ? null
                         : existing.get(existing.size() - 1).getToStop();
@@ -110,7 +100,7 @@ public class ModifyService {
                     newSeg.setRoute(route);
                     newSeg.setFromStop(lastStop);
                     newSeg.setToStop(stopToAdd);
-                    newSeg.setDistanceMeters(estimateDistance(lastStop, stopToAdd));
+                    newSeg.setDistanceMeters(haversine(lastStop, stopToAdd));
                     newSeg.setAverageTravelTimeSeconds(180);
                     newSeg.setAverageWaitTimeSeconds(300);
                     newSeg.setOperatingCostPerHour(java.math.BigDecimal.valueOf(150));
@@ -124,8 +114,6 @@ public class ModifyService {
                 }
                 Long stopId = request.getModification().getStopId();
                 List<RouteSegment> segments = segmentRepository.findByRoute_Id(route.getId());
-
-                // Remove segments that touch this stop on this route
                 List<RouteSegment> toRemove = segments.stream()
                         .filter(s -> s.getFromStop().getId().equals(stopId)
                                 || s.getToStop().getId().equals(stopId))
@@ -136,17 +124,16 @@ public class ModifyService {
                     "Unknown modificationType: " + type + ". Use INCR_SERVICE, DECR_SERVICE, ADD_STOP, or REMOVE_STOP.");
         }
 
-        List<ZoneScoreResponse> scores = zoneScoreService.calculateAllZoneScores();
+        List<ZoneScoreResponse> scores = zoneService.getZoneScores();
         return new ModifyLineResponse(scores, request.getTime());
     }
 
-    private double estimateDistance(TransitStop from, TransitStop to) {
+    private double haversine(TransitStop from, TransitStop to) {
         double dLat = Math.toRadians(to.getLat() - from.getLat());
         double dLng = Math.toRadians(to.getLng() - from.getLng());
         double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
                 + Math.cos(Math.toRadians(from.getLat())) * Math.cos(Math.toRadians(to.getLat()))
                 * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return 6371000 * c; // meters
+        return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 }
