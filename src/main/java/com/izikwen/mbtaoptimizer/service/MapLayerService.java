@@ -9,6 +9,7 @@ import com.izikwen.mbtaoptimizer.repository.RouteSegmentRepository;
 import com.izikwen.mbtaoptimizer.repository.TransitStopRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -83,5 +84,36 @@ public class MapLayerService {
         response.setLng(cell.getLng());
         response.setIntensity(cell.getIntensity());
         return response;
+    }
+
+    public List<HeatmapGridCellResponse> getDynamicGridHeatmap(
+            double minLat, double minLng, double maxLat, double maxLng) {
+
+        double cellSize = 0.005;
+
+        double latDiff = maxLat - minLat;
+        double lngDiff = maxLng - minLng;
+
+        if ((latDiff / cellSize) * (lngDiff / cellSize) > 2000) {
+            cellSize = Math.max(latDiff / 40.0, lngDiff / 40.0);
+        }
+
+        int rows = (int) Math.ceil(latDiff / cellSize);
+        int cols = (int) Math.ceil(lngDiff / cellSize);
+
+        List<HeatmapGridCellResponse> cells = new ArrayList<>(rows * cols);
+
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                double cellMinLat = minLat + r * cellSize;
+                double cellMinLng = minLng + c * cellSize;
+                double cellMaxLat = cellMinLat + cellSize;
+                double cellMaxLng = cellMinLng + cellSize;
+                double intensity = Math.random();
+                cells.add(new HeatmapGridCellResponse(cellMinLat, cellMinLng, cellMaxLat, cellMaxLng, intensity));
+            }
+        }
+
+        return cells;
     }
 }
