@@ -6,9 +6,9 @@ import org.springframework.stereotype.Service;
 public class SharkMascotService {
 
     public String moodForScore(double score) {
-        if (score >= 85) return "ECSTATIC_SHARK";
-        if (score >= 72) return "HAPPY_SHARK";
-        if (score >= 60) return "THINKING_SHARK";
+        if (score == 0) return "ECSTATIC_SHARK";
+        if (score  > 0) return "THINKING_SHARK";
+
         return "SAD_SHARK";
     }
 }
