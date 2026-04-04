@@ -38,3 +38,7 @@ next-env.d.ts
 .next/trace
 
 /server/.env
+
+*/target
+
+cf_config.txt

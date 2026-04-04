@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+#bottomNavBar {
+    @apply absolute left-0 bottom-0 w-screen flex pl-4;
+    z-index: 50;
+}
+
+#bottomNavBar > button,
+#bottomNavBar .settings-wrapper > button {
+    @apply mx-2 px-9 py-2 text-center rounded-t-md;
+    font-size:14px;
+    color: black;
+    background-color:lightgray;
+    border: 2px solid black;
+}
+
+.settings-wrapper {
+    @apply relative;
+}
+
+.settings-popup {
+    @apply absolute bottom-full left-0 mb-0 p-4 rounded-t-lg;
+    width: 260px;
+    background-color: white;
+    border: 2px solid black;
+    border-bottom: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+    pointer-events: none;
+}
+
+.settings-wrapper:hover .settings-popup {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.settings-popup-title {
+    @apply font-bold text-sm text-black mb-3 pb-2;
+    border-bottom: 1px solid #ddd;
+}
+
+.settings-section {
+    @apply flex flex-col gap-1;
+}
+
+.settings-label {
+    @apply text-xs font-medium text-gray-600;
+}
+
+.settings-slider {
+    @apply w-full cursor-pointer;
+    accent-color: black;
+}
+
+.settings-time-display {
+    @apply text-sm font-mono text-black text-center;
+}
+
+#simTimeDisplay {
+    @apply absolute top-4 right-4 font-mono font-bold text-lg px-4 py-2 rounded-lg;
+    z-index: 50;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    letter-spacing: 0.05em;
+}
+
+#scoreDisplay {
+    @apply absolute bottom-0 right-4 flex items-center gap-3 px-6 py-2 rounded-t-lg;
+    z-index: 50;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+}
+
+.score-label {
+    @apply text-xs uppercase tracking-widest text-gray-400;
+}
+
+.score-value {
+    @apply text-lg font-mono font-bold;
+}
