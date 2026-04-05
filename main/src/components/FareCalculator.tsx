@@ -28,7 +28,7 @@ export default function FareCalculator() {
 
   const handleEstimate = async () => {
     if (selectedModes.length === 0) {
-      setError('Please select at least one transit mode.');
+      setError('Select at least one mode.');
       return;
     }
     setIsLoading(true);
@@ -36,170 +36,130 @@ export default function FareCalculator() {
     setFareResult(null);
 
     try {
-      const response = await fetch('http://localhost:8080/api/fares/estimate', {
+      const response = await fetch('http://localhost:5777/api/fares/estimate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tripModes: selectedModes, isReducedFare }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
       const data: FareResult = await response.json();
       setFareResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch fare estimate.');
+      const message = err instanceof Error ? err.message : 'Failed to fetch fare estimate.';
+      console.error('Fetch error:', err);
+      setError(message);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div
-      className="w-64 rounded-2xl shadow-2xl overflow-hidden"
-      style={{
-        background: 'rgba(15, 15, 25, 0.88)',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid rgba(255,255,255,0.08)',
-      }}
-    >
-      {/* Header */}
-      <div
-        className="px-4 py-3 flex items-center gap-2"
-        style={{
-          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-          borderBottom: '1px solid rgba(255,255,255,0.07)',
-        }}
-      >
-        <span className="text-lg">🎫</span>
-        <div>
-          <p className="text-white font-bold text-sm leading-tight">Fare Estimator</p>
-          <p className="text-xs" style={{ color: '#7c8db0' }}>MBTA Passenger</p>
-        </div>
+    <div>
+      {/* Section header */}
+      <div className="flex items-center gap-1.5 mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+          className="w-3.5 h-3.5 text-green-500">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.91s4.18 1.39 4.18 3.91c-.01 1.83-1.38 2.83-3.12 3.16z"/>
+        </svg>
+        <span className="text-xs font-semibold tracking-widest text-gray-500 uppercase">Fare Estimator</span>
       </div>
 
-      <div className="px-4 py-3 space-y-3">
-        {/* Mode selection */}
+      {/* Transit mode buttons */}
+      <div className="space-y-1.5 mb-3">
+        {TRANSIT_MODES.map(({ label, value, icon }) => {
+          const active = selectedModes.includes(value);
+          return (
+            <button
+              key={value}
+              onClick={() => toggleMode(value)}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150 border ${
+                active
+                  ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold'
+                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 font-medium'
+              }`}
+            >
+              <span>{icon}</span>
+              <span className="flex-1 text-left">{label}</span>
+              {active && (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                  className="w-4 h-4 text-blue-500">
+                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd"/>
+                </svg>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Reduced fare toggle */}
+      <div className="flex items-center justify-between px-3 py-2 bg-white border border-gray-200 rounded-lg mb-3">
         <div>
-          <p className="text-xs font-semibold mb-2 uppercase tracking-widest" style={{ color: '#7c8db0' }}>
-            Trip Mode
-          </p>
-          <div className="space-y-1.5">
-            {TRANSIT_MODES.map(({ label, value, icon }) => {
-              const active = selectedModes.includes(value);
-              return (
-                <button
-                  key={value}
-                  onClick={() => toggleMode(value)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200"
-                  style={{
-                    background: active
-                      ? 'linear-gradient(135deg, rgba(99,102,241,0.35) 0%, rgba(139,92,246,0.25) 100%)'
-                      : 'rgba(255,255,255,0.04)',
-                    border: active
-                      ? '1px solid rgba(139,92,246,0.6)'
-                      : '1px solid rgba(255,255,255,0.06)',
-                    color: active ? '#c4b5fd' : '#9ca3af',
-                    transform: active ? 'scale(1.01)' : 'scale(1)',
-                    boxShadow: active ? '0 0 12px rgba(139,92,246,0.2)' : 'none',
-                  }}
-                >
-                  <span className="text-base">{icon}</span>
-                  <span>{label}</span>
-                  {active && (
-                    <span className="ml-auto text-xs font-bold" style={{ color: '#a78bfa' }}>✓</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <p className="text-xs font-semibold text-gray-700">Reduced Fare</p>
+          <p className="text-xs text-gray-400">Student / Senior / TAP</p>
         </div>
-
-        {/* Reduced fare toggle */}
-        <div
-          className="flex items-center justify-between px-3 py-2 rounded-xl"
-          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <div>
-            <p className="text-xs font-medium text-white">Reduced Fare</p>
-            <p className="text-xs" style={{ color: '#7c8db0' }}>Student / Senior / TAP</p>
-          </div>
-          <button
-            onClick={() => setIsReducedFare((v) => !v)}
-            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none"
-            style={{
-              background: isReducedFare
-                ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
-                : 'rgba(255,255,255,0.12)',
-            }}
-            aria-label="Toggle reduced fare"
-          >
-            <span
-              className="inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-200"
-              style={{ transform: isReducedFare ? 'translateX(1.375rem)' : 'translateX(0.25rem)' }}
-            />
-          </button>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div
-            className="px-3 py-2 rounded-xl text-xs"
-            style={{
-              background: 'rgba(239,68,68,0.12)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              color: '#fca5a5',
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {/* Result */}
-        {fareResult && (
-          <div
-            className="px-3 py-3 rounded-xl text-center"
-            style={{
-              background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.1) 100%)',
-              border: '1px solid rgba(16,185,129,0.3)',
-            }}
-          >
-            <p className="text-2xl font-black tracking-tight" style={{ color: '#34d399' }}>
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(fareResult.totalFare)}
-            </p>
-            <p className="text-xs mt-1" style={{ color: '#6ee7b7' }}>
-              {fareResult.fareBreakdown}
-            </p>
-          </div>
-        )}
-
-        {/* CTA Button */}
         <button
-          onClick={handleEstimate}
-          disabled={isLoading}
-          className="w-full py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          style={{
-            background: isLoading
-              ? 'rgba(99,102,241,0.4)'
-              : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-            color: 'white',
-            boxShadow: isLoading ? 'none' : '0 4px 15px rgba(99,102,241,0.4)',
-          }}
+          onClick={() => setIsReducedFare((v) => !v)}
+          className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none"
+          style={{ background: isReducedFare ? '#3b82f6' : '#d1d5db' }}
+          aria-label="Toggle reduced fare"
         >
-          {isLoading ? (
-            <>
-              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Estimating...
-            </>
-          ) : (
-            'Estimate Fare'
-          )}
+          <span
+            className="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200"
+            style={{ transform: isReducedFare ? 'translateX(1.15rem)' : 'translateX(0.2rem)' }}
+          />
         </button>
       </div>
+
+      {/* Error */}
+      {error && (
+        <div className="px-3 py-2 mb-2 rounded-lg text-xs text-red-600 bg-red-50 border border-red-200">
+          {error}
+        </div>
+      )}
+
+      {/* Result card */}
+      {fareResult && (
+        <div className="px-3 py-3 mb-3 rounded-lg bg-red-50 border border-red-200">
+          <div className="flex items-start gap-2">
+            <span className="text-lg mt-0.5">🚌</span>
+            <div>
+              <p className="text-xs font-semibold text-gray-500">Transit Fare</p>
+              <p className="text-xl font-black text-red-500 leading-tight">
+                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(fareResult.totalFare)}
+                <span className="text-xs font-medium text-gray-400">/trip</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">{fareResult.fareBreakdown}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Estimate button */}
+      <button
+        onClick={handleEstimate}
+        disabled={isLoading}
+        className="w-full py-2.5 rounded-lg text-sm font-bold text-white transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        style={{
+          background: isLoading
+            ? '#93c5fd'
+            : 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)',
+          boxShadow: isLoading ? 'none' : '0 2px 8px rgba(59,130,246,0.35)',
+        }}
+      >
+        {isLoading ? (
+          <>
+            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Estimating...
+          </>
+        ) : (
+          'Estimate Fare'
+        )}
+      </button>
     </div>
   );
 }
