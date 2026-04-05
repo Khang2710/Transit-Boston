@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import type { TransitLine, TransitStop } from '@/types/transit';
+import FareCalculator from '@/components/FareCalculator';
 
 interface MapClientProps {
   lines: TransitLine[];
@@ -332,6 +333,10 @@ const MapClient = ({ lines }: MapClientProps) => {
           );
         })}
       </MapContainer>
+      {/* Fare Calculator - floating bottom-left */}
+      <div className="absolute bottom-6 left-4 z-50">
+        <FareCalculator />
+      </div>
     </div>
   );
 };
