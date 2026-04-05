@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
 import type { TransitLine } from '@/types/transit';
+import type { RouteSegment } from '@/app/app/page';
 
 interface LocationPoint {
   lat: number;
@@ -16,6 +17,8 @@ interface MapProps {
   destinationLocation?: LocationPoint | null;
   routeGeometry?: [number, number][] | null;
   searchedLocation?: LocationPoint | null; // kept for back-compat
+  filterMode?: string;
+  routeSegments?: RouteSegment[] | null;
 }
 
 const MapComponent = dynamic(() => import('./MapClient'), {

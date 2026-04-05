@@ -7,12 +7,22 @@ import type { TransitLine, TransitStop } from '@/types/transit';
 
 interface LocationPoint { lat: number; lng: number; address: string; }
 
+interface RouteSegment {
+  lineId: string;
+  lineName: string;
+  mode: string;
+  color: string;
+  stops: { name: string; lat: number; lng: number }[];
+}
+
 interface MapClientProps {
   lines: TransitLine[];
   originLocation?: LocationPoint | null;
   destinationLocation?: LocationPoint | null;
   routeGeometry?: [number, number][] | null;
   searchedLocation?: LocationPoint | null; // back-compat
+  filterMode?: string; // 'Bus' | 'Subway' | 'Heatmap'
+  routeSegments?: RouteSegment[] | null;
 }
 
 // ── Map updater: pan or fit bounds ──
@@ -83,7 +93,7 @@ const MAP_STYLES = {
 
 const BUS_COLOR = '#e6a5b1';
 
-const MapClient = ({ lines, originLocation, destinationLocation, routeGeometry }: MapClientProps) => {
+const MapClient = ({ lines, originLocation, destinationLocation, routeGeometry, filterMode = 'Subway', routeSegments }: MapClientProps) => {
   const defaultCenter: [number, number] = [42.3601, -71.0589];
   const [currentStyle, setCurrentStyle] = useState('cartoVoyager');
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
@@ -113,9 +123,12 @@ const MapClient = ({ lines, originLocation, destinationLocation, routeGeometry }
     if (!Array.isArray(lines)) return [];
     const result: { positions: [number, number][]; color: string; lineName: string; isBus: boolean; lineId: number }[] = [];
     for (const line of lines) {
+      const isBus = line.mode === 'bus';
+      // Filter by mode toggle
+      if (filterMode === 'Bus' && !isBus) continue;
+      if (filterMode === 'Subway' && isBus) continue;
       const stopMap = new Map<number, TransitStop>();
       for (const stop of line.stops) stopMap.set(stop.stopId, stop);
-      const isBus = line.mode === 'bus';
       const lineColor = isBus ? BUS_COLOR : (line.color.startsWith('#') ? line.color : `#${line.color}`);
       for (const edge of line.edges) {
         const from = stopMap.get(edge.fromStopId);
@@ -124,14 +137,18 @@ const MapClient = ({ lines, originLocation, destinationLocation, routeGeometry }
       }
     }
     return result.sort((a, b) => (a.isBus === b.isBus ? 0 : a.isBus ? -1 : 1));
-  }, [lines]);
+  }, [lines, filterMode]);
 
   const stopMarkers = useMemo(() => {
     if (!Array.isArray(lines)) return [];
     const map = new Map<string, { stop: TransitStop; lines: { name: string; color: string; mode: string }[] }>();
     for (const line of lines) {
       const isBus = line.mode === 'bus';
-      if (isBus && line.lineId !== selectedLineId) continue;
+      // Filter by mode toggle
+      if (filterMode === 'Bus' && !isBus) continue;
+      if (filterMode === 'Subway' && isBus) continue;
+      // For bus mode: only show selected line's stops to avoid clutter
+      if (isBus && filterMode !== 'Bus' && line.lineId !== selectedLineId) continue;
       const lineColor = isBus ? BUS_COLOR : (line.color.startsWith('#') ? line.color : `#${line.color}`);
       for (const stop of line.stops) {
         const existing = map.get(stop.mbtaStopId);
@@ -143,7 +160,7 @@ const MapClient = ({ lines, originLocation, destinationLocation, routeGeometry }
       }
     }
     return Array.from(map.values());
-  }, [lines, selectedLineId]);
+  }, [lines, selectedLineId, filterMode]);
 
   return (
     <div className="relative w-full h-full">
@@ -172,8 +189,22 @@ const MapClient = ({ lines, originLocation, destinationLocation, routeGeometry }
           attribution={MAP_STYLES[currentStyle as keyof typeof MAP_STYLES].attribution}
         />
 
-        {/* Route polyline */}
-        {routeGeometry && routeGeometry.length > 1 && (
+        {/* Transit route segments — colored polylines per line */}
+        {routeSegments && routeSegments.length > 0 ? (
+          routeSegments.map((seg, idx) => {
+            const positions = seg.stops.map(s => [s.lat, s.lng] as [number, number]);
+            const color = seg.color && seg.color !== '' ? (seg.color.startsWith('#') ? seg.color : `#${seg.color}`) : '#3b82f6';
+            return (
+              <Polyline
+                key={`seg-${idx}`}
+                positions={positions}
+                color={color}
+                weight={7}
+                opacity={0.95}
+              />
+            );
+          })
+        ) : routeGeometry && routeGeometry.length > 1 ? (
           <Polyline
             positions={routeGeometry}
             color="#3b82f6"
@@ -181,7 +212,7 @@ const MapClient = ({ lines, originLocation, destinationLocation, routeGeometry }
             opacity={0.85}
             dashArray="10, 6"
           />
-        )}
+        ) : null}
 
         {/* Origin marker (green) */}
         {originCoords && (

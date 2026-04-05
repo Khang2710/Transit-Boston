@@ -32,6 +32,14 @@ function getScoreLabel(score: number): { label: string; color: string; bg: strin
 
 interface LatLng { lat: number; lng: number; }
 
+export interface RouteSegment {
+  lineId: string;
+  lineName: string;
+  mode: string;
+  color: string;
+  stops: { name: string; lat: number; lng: number }[];
+}
+
 export default function Home() {
   const [lines, setLines] = useState<TransitLine[]>([]);
   const [timeOfDay, setTimeOfDay] = useState(() => {
@@ -49,11 +57,13 @@ export default function Home() {
   const [destinationCoords, setDestinationCoords] = useState<LatLng | null>(null);
   const [destinationAddress, setDestinationAddress] = useState<string | null>(null);
 
-  // Route from OSRM
+  // Route state
   const [routeGeometry, setRouteGeometry] = useState<[number, number][] | null>(null);
   const [routeDistanceMi, setRouteDistanceMi] = useState<number | null>(null);
   const [routeDurationMin, setRouteDurationMin] = useState<number | null>(null);
   const [isFetchingRoute, setIsFetchingRoute] = useState(false);
+  const [routeSegments, setRouteSegments] = useState<RouteSegment[] | null>(null);
+  const [routeSummary, setRouteSummary] = useState<string | null>(null);
 
   // Fetch transit lines
   useEffect(() => {
@@ -102,28 +112,60 @@ export default function Home() {
     );
   }, []);
 
-  // Fetch route when both coords are set
+  // Fetch actual transit route from backend Dijkstra endpoint
   const fetchRoute = useCallback(async (origin: LatLng, dest: LatLng) => {
     setIsFetchingRoute(true);
     setRouteGeometry(null);
     setRouteDistanceMi(null);
     setRouteDurationMin(null);
+    setRouteSegments(null);
+    setRouteSummary(null);
+
+    // Fallback Haversine estimate
+    const R = 3958.8;
+    const dLat = (dest.lat - origin.lat) * Math.PI / 180;
+    const dLon = (dest.lng - origin.lng) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(origin.lat*Math.PI/180)*Math.cos(dest.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+    const straightMi = R * 2 * Math.asin(Math.sqrt(a));
+    const fallbackMi = straightMi * 1.4;
+    const fallbackMin = Math.round((fallbackMi / 15) * 60 + 5);
+
     try {
-      const res = await fetch(
-        `https://router.project-osrm.org/route/v1/foot/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`
-      );
-      const data = await res.json();
-      if (data.routes?.length > 0) {
-        const route = data.routes[0];
-        setRouteDistanceMi(route.distance / 1609.34);
-        setRouteDurationMin(Math.round(route.duration / 60));
-        const coords: [number, number][] = route.geometry.coordinates.map(
-          ([lng, lat]: [number, number]) => [lat, lng]
+      const res = await fetch('http://localhost:5777/api/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ originLat: origin.lat, originLng: origin.lng, destLat: dest.lat, destLng: dest.lng }),
+      });
+      if (!res.ok) throw new Error(`Route API ${res.status}`);
+      const data: { segments: RouteSegment[]; totalDistanceMi: number; totalStops: number; transfers: number; summary: string } = await res.json();
+
+      if (data.segments && data.segments.length > 0) {
+        setRouteSegments(data.segments);
+        setRouteSummary(data.summary);
+        // Build flat geometry for MapController bounds
+        const coords: [number, number][] = data.segments.flatMap(seg =>
+          seg.stops.map((s: { lat: number; lng: number }) => [s.lat, s.lng] as [number, number])
         );
         setRouteGeometry(coords);
+        setRouteDistanceMi(data.totalDistanceMi > 0 ? data.totalDistanceMi : fallbackMi);
+        // Estimate time: 30s per stop + 5 min wait
+        setRouteDurationMin(Math.round(data.totalStops * 0.5 + 5));
+      } else {
+        // No backend path found → show straight line fallback
+        console.warn('No transit route found, using straight-line estimate');
+        setRouteGeometry([[origin.lat, origin.lng], [dest.lat, dest.lng]]);
+        setRouteDistanceMi(fallbackMi);
+        setRouteDurationMin(fallbackMin);
       }
-    } catch (e) { console.error('Route fetch error:', e); }
-    finally { setIsFetchingRoute(false); }
+    } catch (e) {
+      console.error('Route fetch error', e);
+      // Graceful fallback
+      setRouteGeometry([[origin.lat, origin.lng], [dest.lat, dest.lng]]);
+      setRouteDistanceMi(fallbackMi);
+      setRouteDurationMin(fallbackMin);
+    } finally {
+      setIsFetchingRoute(false);
+    }
   }, []);
 
   // Handle destination search from Navbar
@@ -296,6 +338,8 @@ export default function Home() {
             originLocation={originCoords ? { lat: originCoords.lat, lng: originCoords.lng, address: originAddress || '' } : null}
             destinationLocation={destinationCoords ? { lat: destinationCoords.lat, lng: destinationCoords.lng, address: destinationAddress || '' } : null}
             routeGeometry={routeGeometry}
+            filterMode={activeMode}
+            routeSegments={routeSegments}
           />
         </main>
       </div>
